@@ -128,10 +128,11 @@ resource "aws_lb" "app_lb" {
 }
 
 resource "aws_lb_target_group" "app_tg" {
-  name     = "video-target-group"
-  port     = 8080
-  protocol = "HTTP"
-  vpc_id   = aws_vpc.main.id
+  name         = "video-target-group"
+  port         = 8080
+  protocol     = "HTTP"
+  vpc_id       = aws_vpc.main.id
+  target_type  = "ip" # <-- ESSENCIAL para Fargate
 
   health_check {
     path                = "/actuator/health"
