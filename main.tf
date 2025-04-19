@@ -20,20 +20,18 @@ resource "aws_iam_role" "ecs_task_execution_role" {
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
-    Statement = [
-      {
-        Action = "sts:AssumeRole",
-        Effect = "Allow",
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
+    Statement = [{
+      Action = "sts:AssumeRole",
+      Effect = "Allow",
+      Principal = {
+        Service = "ecs-tasks.amazonaws.com"
       }
-    ]
+    }]
   })
 
   lifecycle {
-    create_before_destroy = true
-    ignore_changes        = all
+    prevent_destroy = false
+    ignore_changes  = all
   }
 }
 
@@ -114,8 +112,13 @@ resource "aws_ecs_cluster" "app_cluster" {
 }
 
 resource "aws_cloudwatch_log_group" "ecs_logs" {
-  name              = "/ecs/video-service"
+  name              = "/ecs/springboot-service"
   retention_in_days = 7
+
+  lifecycle {
+    prevent_destroy = false
+    ignore_changes  = all
+  }
 }
 
 resource "aws_ecs_task_definition" "app_task" {
