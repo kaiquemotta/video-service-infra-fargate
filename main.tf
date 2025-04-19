@@ -112,7 +112,7 @@ resource "aws_ecs_cluster" "app_cluster" {
 }
 
 resource "aws_cloudwatch_log_group" "ecs_logs" {
-  name              = "/ecs/springboot-service"
+  name              = "/ecs/video-task"
   retention_in_days = 7
 
   lifecycle {
