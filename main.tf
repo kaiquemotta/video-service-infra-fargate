@@ -4,7 +4,7 @@ provider "aws" {
 }
 
 resource "aws_ecr_repository" "video_service" {
-  name                 = "video-service"
+  name                 = "video-service-1"
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
@@ -17,7 +17,7 @@ resource "aws_ecr_repository" "video_service" {
 }
 
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "ecsTaskExecutionRole"
+  name = "ecsTaskExecutionRole1"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
@@ -47,7 +47,7 @@ resource "aws_vpc" "main" {
   enable_dns_hostnames = true
 
   tags = {
-    Name = "fargate-vpc"
+    Name = "fargate-vpc1"
   }
 }
 
@@ -58,7 +58,7 @@ resource "aws_subnet" "public" {
   availability_zone       = "us-east-1a"
 
   tags = {
-    Name = "fargate-subnet"
+    Name = "fargate-subnet1"
   }
 }
 
@@ -66,7 +66,7 @@ resource "aws_internet_gateway" "gw" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "fargate-gateway"
+    Name = "fargate-gateway1"
   }
 }
 
@@ -79,7 +79,7 @@ resource "aws_route_table" "rt" {
   }
 
   tags = {
-    Name = "fargate-rt"
+    Name = "fargate-rt1"
   }
 }
 
@@ -89,7 +89,7 @@ resource "aws_route_table_association" "a" {
 }
 
 resource "aws_security_group" "fargate_sg" {
-  name        = "fargate-sg"
+  name        = "fargate-sg1"
   description = "Permitir acesso HTTP"
   vpc_id      = aws_vpc.main.id
 
@@ -109,11 +109,11 @@ resource "aws_security_group" "fargate_sg" {
 }
 
 resource "aws_ecs_cluster" "app_cluster" {
-  name = "video-cluster"
+  name = "video-cluster1"
 }
 
 resource "aws_cloudwatch_log_group" "ecs_logs" {
-  name              = "/ecs/springboot-service"
+  name              = "/ecs/video-cluster1"
   retention_in_days = 7
 
   lifecycle {
@@ -123,7 +123,7 @@ resource "aws_cloudwatch_log_group" "ecs_logs" {
 }
 
 resource "aws_ecs_task_definition" "app_task" {
-  family                   = "video-task"
+  family                   = "video-task1"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "512"
@@ -132,7 +132,7 @@ resource "aws_ecs_task_definition" "app_task" {
 
   container_definitions = jsonencode([
     {
-      name  = "video-app",
+      name  = "video-app1",
       image = "${aws_ecr_repository.video_service.repository_url}:latest",
       portMappings = [
         {
@@ -153,7 +153,7 @@ resource "aws_ecs_task_definition" "app_task" {
 }
 
 resource "aws_ecs_service" "app_service" {
-  name            = "video-service"
+  name            = "video-service1"
   cluster         = aws_ecs_cluster.app_cluster.id
   task_definition = aws_ecs_task_definition.app_task.arn
   launch_type     = "FARGATE"
