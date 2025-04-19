@@ -11,7 +11,8 @@ resource "aws_ecr_repository" "video_service" {
   }
 
   lifecycle {
-    ignore_changes = [image_tag_mutability]
+    prevent_destroy = false
+    ignore_changes  = all
   }
 }
 
@@ -28,11 +29,6 @@ resource "aws_iam_role" "ecs_task_execution_role" {
       }
     }]
   })
-
-  lifecycle {
-    prevent_destroy = false
-    ignore_changes  = all
-  }
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_policy" {
@@ -50,14 +46,25 @@ resource "aws_vpc" "main" {
   }
 }
 
-resource "aws_subnet" "public" {
+resource "aws_subnet" "public_a" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
   map_public_ip_on_launch = true
   availability_zone       = "us-east-1a"
 
   tags = {
-    Name = "fargate-subnet"
+    Name = "fargate-subnet-a"
+  }
+}
+
+resource "aws_subnet" "public_b" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.2.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "us-east-1b"
+
+  tags = {
+    Name = "fargate-subnet-b"
   }
 }
 
@@ -82,8 +89,13 @@ resource "aws_route_table" "rt" {
   }
 }
 
-resource "aws_route_table_association" "a" {
-  subnet_id      = aws_subnet.public.id
+resource "aws_route_table_association" "a1" {
+  subnet_id      = aws_subnet.public_a.id
+  route_table_id = aws_route_table.rt.id
+}
+
+resource "aws_route_table_association" "a2" {
+  subnet_id      = aws_subnet.public_b.id
   route_table_id = aws_route_table.rt.id
 }
 
@@ -104,6 +116,42 @@ resource "aws_security_group" "fargate_sg" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_lb" "app_lb" {
+  name               = "video-app-lb"
+  internal           = false
+  load_balancer_type = "application"
+  subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+  security_groups    = [aws_security_group.fargate_sg.id]
+}
+
+resource "aws_lb_target_group" "app_tg" {
+  name     = "video-target-group"
+  port     = 8080
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+
+  health_check {
+    path                = "/actuator/health"
+    protocol            = "HTTP"
+    matcher             = "200-299"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+}
+
+resource "aws_lb_listener" "app_listener" {
+  load_balancer_arn = aws_lb.app_lb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_tg.arn
   }
 }
 
@@ -159,12 +207,26 @@ resource "aws_ecs_service" "app_service" {
   desired_count   = 1
 
   network_configuration {
-    subnets          = [aws_subnet.public.id]
+    subnets          = [aws_subnet.public_a.id, aws_subnet.public_b.id]
     assign_public_ip = true
     security_groups  = [aws_security_group.fargate_sg.id]
   }
 
-  depends_on = [aws_iam_role_policy_attachment.ecs_task_execution_policy]
+  load_balancer {
+    target_group_arn = aws_lb_target_group.app_tg.arn
+    container_name   = "video-app"
+    container_port   = 8080
+  }
+
+  depends_on = [
+    aws_lb_listener.app_listener,
+    aws_iam_role_policy_attachment.ecs_task_execution_policy
+  ]
+}
+
+output "load_balancer_dns" {
+  description = "Public DNS name of the Load Balancer"
+  value       = aws_lb.app_lb.dns_name
 }
 
 output "ecr_repository_url" {
