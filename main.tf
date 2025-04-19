@@ -28,11 +28,6 @@ resource "aws_iam_role" "ecs_task_execution_role" {
       }
     }]
   })
-
-  lifecycle {
-    prevent_destroy = false
-    ignore_changes  = all
-  }
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_policy" {
@@ -107,6 +102,42 @@ resource "aws_security_group" "fargate_sg" {
   }
 }
 
+resource "aws_lb" "app_lb" {
+  name               = "video-app-lb"
+  internal           = false
+  load_balancer_type = "application"
+  subnets            = [aws_subnet.public.id]
+  security_groups    = [aws_security_group.fargate_sg.id]
+}
+
+resource "aws_lb_target_group" "app_tg" {
+  name     = "video-target-group"
+  port     = 8080
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+
+  health_check {
+    path                = "/actuator/health"
+    protocol            = "HTTP"
+    matcher             = "200-299"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+}
+
+resource "aws_lb_listener" "app_listener" {
+  load_balancer_arn = aws_lb.app_lb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_tg.arn
+  }
+}
+
 resource "aws_ecs_cluster" "app_cluster" {
   name = "video-cluster"
 }
@@ -114,11 +145,6 @@ resource "aws_ecs_cluster" "app_cluster" {
 resource "aws_cloudwatch_log_group" "ecs_logs" {
   name              = "/ecs/video-task"
   retention_in_days = 7
-
-  lifecycle {
-    prevent_destroy = false
-    ignore_changes  = all
-  }
 }
 
 resource "aws_ecs_task_definition" "app_task" {
@@ -164,7 +190,21 @@ resource "aws_ecs_service" "app_service" {
     security_groups  = [aws_security_group.fargate_sg.id]
   }
 
-  depends_on = [aws_iam_role_policy_attachment.ecs_task_execution_policy]
+  load_balancer {
+    target_group_arn = aws_lb_target_group.app_tg.arn
+    container_name   = "video-app"
+    container_port   = 8080
+  }
+
+  depends_on = [
+    aws_lb_listener.app_listener,
+    aws_iam_role_policy_attachment.ecs_task_execution_policy
+  ]
+}
+
+output "load_balancer_dns" {
+  description = "Public DNS name of the Load Balancer"
+  value       = aws_lb.app_lb.dns_name
 }
 
 output "ecr_repository_url" {
