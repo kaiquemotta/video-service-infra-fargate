@@ -9,6 +9,10 @@ resource "aws_ecr_repository" "video_service" {
   image_scanning_configuration {
     scan_on_push = true
   }
+
+  lifecycle {
+    ignore_changes = [image_tag_mutability]
+  }
 }
 
 resource "aws_iam_role" "ecs_task_execution_role" {
@@ -16,14 +20,21 @@ resource "aws_iam_role" "ecs_task_execution_role" {
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
-    Statement = [{
-      Action = "sts:AssumeRole",
-      Effect = "Allow",
-      Principal = {
-        Service = "ecs-tasks.amazonaws.com"
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Effect = "Allow",
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
       }
-    }]
+    ]
   })
+
+  lifecycle {
+    create_before_destroy = true
+    ignore_changes        = all
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_policy" {
@@ -115,22 +126,26 @@ resource "aws_ecs_task_definition" "app_task" {
   memory                   = "1024"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
 
-  container_definitions = jsonencode([{
-    name  = "springboot-app",
-    image = "${aws_ecr_repository.video_service.repository_url}:latest",
-    portMappings = [{
-      containerPort = 8080,
-      hostPort      = 8080
-    }],
-    logConfiguration = {
-      logDriver = "awslogs",
-      options = {
-        awslogs-group         = aws_cloudwatch_log_group.ecs_logs.name,
-        awslogs-region        = "us-east-1",
-        awslogs-stream-prefix = "ecs"
+  container_definitions = jsonencode([
+    {
+      name  = "springboot-app",
+      image = "${aws_ecr_repository.video_service.repository_url}:latest",
+      portMappings = [
+        {
+          containerPort = 8080,
+          hostPort      = 8080
+        }
+      ],
+      logConfiguration = {
+        logDriver = "awslogs",
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.ecs_logs.name,
+          awslogs-region        = "us-east-1",
+          awslogs-stream-prefix = "ecs"
+        }
       }
     }
-  }])
+  ])
 }
 
 resource "aws_ecs_service" "app_service" {
@@ -141,9 +156,9 @@ resource "aws_ecs_service" "app_service" {
   desired_count   = 1
 
   network_configuration {
-    subnets         = [aws_subnet.public.id]
+    subnets          = [aws_subnet.public.id]
     assign_public_ip = true
-    security_groups = [aws_security_group.fargate_sg.id]
+    security_groups  = [aws_security_group.fargate_sg.id]
   }
 
   depends_on = [aws_iam_role_policy_attachment.ecs_task_execution_policy]
