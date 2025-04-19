@@ -2,7 +2,6 @@ provider "aws" {
   region = "us-east-1"
 }
 
-# Criação do repositório ECR
 resource "aws_ecr_repository" "video_service" {
   name                 = "video-service"
   image_tag_mutability = "MUTABLE"
@@ -12,7 +11,6 @@ resource "aws_ecr_repository" "video_service" {
   }
 }
 
-# IAM role para execução da task
 resource "aws_iam_role" "ecs_task_execution_role" {
   name = "ecsTaskExecutionRole"
 
@@ -33,7 +31,6 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# VPC
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_support   = true
@@ -44,7 +41,6 @@ resource "aws_vpc" "main" {
   }
 }
 
-# Subnet pública
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
@@ -56,7 +52,6 @@ resource "aws_subnet" "public" {
   }
 }
 
-# Internet Gateway
 resource "aws_internet_gateway" "gw" {
   vpc_id = aws_vpc.main.id
 
@@ -65,7 +60,6 @@ resource "aws_internet_gateway" "gw" {
   }
 }
 
-# Route table
 resource "aws_route_table" "rt" {
   vpc_id = aws_vpc.main.id
 
@@ -79,13 +73,11 @@ resource "aws_route_table" "rt" {
   }
 }
 
-# Route table association
 resource "aws_route_table_association" "a" {
   subnet_id      = aws_subnet.public.id
   route_table_id = aws_route_table.rt.id
 }
 
-# Security group para liberar porta 8080
 resource "aws_security_group" "fargate_sg" {
   name        = "fargate-sg"
   description = "Permitir acesso HTTP"
@@ -106,12 +98,15 @@ resource "aws_security_group" "fargate_sg" {
   }
 }
 
-# ECS Cluster
 resource "aws_ecs_cluster" "app_cluster" {
   name = "springboot-cluster"
 }
 
-# Task Definition
+resource "aws_cloudwatch_log_group" "ecs_logs" {
+  name              = "/ecs/springboot-service"
+  retention_in_days = 7
+}
+
 resource "aws_ecs_task_definition" "app_task" {
   family                   = "springboot-task"
   network_mode             = "awsvpc"
@@ -119,17 +114,25 @@ resource "aws_ecs_task_definition" "app_task" {
   cpu                      = "512"
   memory                   = "1024"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
-  container_definitions    = jsonencode([{
-    name      = "springboot-app",
-    image     = "${aws_ecr_repository.video_service.repository_url}:latest",
+
+  container_definitions = jsonencode([{
+    name  = "springboot-app",
+    image = "${aws_ecr_repository.video_service.repository_url}:latest",
     portMappings = [{
       containerPort = 8080,
       hostPort      = 8080
-    }]
+    }],
+    logConfiguration = {
+      logDriver = "awslogs",
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.ecs_logs.name,
+        awslogs-region        = "us-east-1",
+        awslogs-stream-prefix = "ecs"
+      }
+    }
   }])
 }
 
-# ECS Service
 resource "aws_ecs_service" "app_service" {
   name            = "springboot-service"
   cluster         = aws_ecs_cluster.app_cluster.id
@@ -146,7 +149,6 @@ resource "aws_ecs_service" "app_service" {
   depends_on = [aws_iam_role_policy_attachment.ecs_task_execution_policy]
 }
 
-# Output da URL do repositório ECR
 output "ecr_repository_url" {
   value = aws_ecr_repository.video_service.repository_url
 }
