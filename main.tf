@@ -110,16 +110,16 @@ resource "aws_security_group" "fargate_sg" {
 }
 
 resource "aws_ecs_cluster" "app_cluster" {
-  name = "springboot-cluster"
+  name = "video-cluster"
 }
 
 resource "aws_cloudwatch_log_group" "ecs_logs" {
-  name              = "/ecs/springboot-service"
+  name              = "/ecs/video-service"
   retention_in_days = 7
 }
 
 resource "aws_ecs_task_definition" "app_task" {
-  family                   = "springboot-task"
+  family                   = "video-task"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "512"
@@ -128,7 +128,7 @@ resource "aws_ecs_task_definition" "app_task" {
 
   container_definitions = jsonencode([
     {
-      name  = "springboot-app",
+      name  = "video-app",
       image = "${aws_ecr_repository.video_service.repository_url}:latest",
       portMappings = [
         {
@@ -149,7 +149,7 @@ resource "aws_ecs_task_definition" "app_task" {
 }
 
 resource "aws_ecs_service" "app_service" {
-  name            = "springboot-service"
+  name            = "video-service"
   cluster         = aws_ecs_cluster.app_cluster.id
   task_definition = aws_ecs_task_definition.app_task.arn
   launch_type     = "FARGATE"
